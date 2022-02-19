@@ -1,0 +1,54 @@
+body{
+    background-color: rgb(0, 0, 0);
+    font: normal 10pt Arial;  
+    text-align: center;  
+    color:white;
+}
+
+
+
+.astronaut {
+   
+    width: 20%;
+    height: auto;
+}
+
+
+.button {
+    color: white;
+    font-size: 20px;
+    text-decoration: none;
+    display: block;
+    text-align: center;
+    padding: 5px;
+    margin-top: 10px;
+    margin-left: 35%;
+    margin-right: 35%;
+}
+
+    .button1 {
+        background-color: rgb(48, 209, 88);
+        border-radius: 10px;
+        border-bottom: 5px solid rgb(55, 156, 85);
+        
+    }
+    .button1:hover {
+        background-color: rgb(0, 255, 76);
+        box-shadow: 0px 0px 10px rgb(255, 255, 255);
+        
+    }
+
+    .button2 {
+        background-color: rgb(78, 48, 209);
+        border-radius: 10px;
+        border-bottom: 5px solid rgb(62, 55, 156);
+        font-size: 20px;
+    }
+
+    .button2:hover {
+        background-color: rgb(255, 0, 212);
+        border-bottom: 5px solid rgb(133, 32, 146);
+        box-shadow: 0px 0px 10px rgb(255, 255, 255);
+        
+    }
+
