@@ -70,11 +70,15 @@
   }
   main a {
     text-decoration: none;
-    color: #333;
+    color: rgb(53, 133, 199);;
     font-weight: bold;
   }
   main a:hover {
     color: #888;
+  }
+  main div {
+    border: 10px outset black;
+
   }
   footer {
     background-color: #333;
@@ -106,3 +110,4 @@ body {
 .lnks li a {
     color: rgb(53, 133, 199);
 }
+
